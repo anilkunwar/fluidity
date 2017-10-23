@@ -2317,6 +2317,7 @@ contains
        end do
 
        nvfields = vector_field_count(states(p+1))
+
        do f = 1, nvfields
           vfield => extract_vector_field(states(p+1), f)
           if (have_option(trim(vfield%option_path)//'/prescribed') .and. &
@@ -2563,6 +2564,13 @@ contains
             call zero(aux_vfield)
             call insert(states(p), aux_vfield, trim(aux_vfield%name))
             call deallocate(aux_vfield)
+            
+          else if((prescribed).and.(trim(vfield%name)=="Velocity")) then 
+
+            call allocate(aux_vfield, vfield%dim, vfield%mesh, "Old"//trim(vfield%name))
+            call zero(aux_vfield)
+            call insert(states(p), aux_vfield, trim(aux_vfield%name))
+            call deallocate(aux_vfield)
 
           else
 
@@ -2584,6 +2592,13 @@ contains
             call insert(states(p), aux_vfield, trim(aux_vfield%name))
             call deallocate(aux_vfield)
 
+          else if((prescribed).and.((trim(vfield%name)=="Velocity"))) then 
+
+            call allocate(aux_vfield, vfield%dim, vfield%mesh, "Iterated"//trim(vfield%name))
+            call zero(aux_vfield)
+            call insert(states(p), aux_vfield, trim(aux_vfield%name))
+            call deallocate(aux_vfield)
+
           else
 
             aux_vfield = extract_vector_field(states(p), trim(vfield%name))
@@ -2598,38 +2613,38 @@ contains
 
           if(trim(vfield%name)=="Velocity") then
 
-            if(iterations>1) then
+             if( iterations>1 .or. prescribed) then
+             
+                call allocate(aux_vfield, vfield%dim, vfield%mesh, "Nonlinear"//trim(vfield%name))
+                call zero(aux_vfield)
+                call insert(states(p), aux_vfield, trim(aux_vfield%name))
+                call deallocate(aux_vfield)
+             
+             else
+             
+                aux_vfield = extract_vector_field(states(p), trim(vfield%name))
+                aux_vfield%name = "Nonlinear"//trim(vfield%name)
+                aux_vfield%option_path=""
+                aux_vfield%aliased = .true.
+                call insert(states(p), aux_vfield, trim(aux_vfield%name))
+             
+             end if
 
-              call allocate(aux_vfield, vfield%dim, vfield%mesh, "Nonlinear"//trim(vfield%name))
-              call zero(aux_vfield)
-              call insert(states(p), aux_vfield, trim(aux_vfield%name))
-              call deallocate(aux_vfield)
-
-            else
-
-              aux_vfield = extract_vector_field(states(p), trim(vfield%name))
-              aux_vfield%name = "Nonlinear"//trim(vfield%name)
-              aux_vfield%option_path=""
-              aux_vfield%aliased = .true.
-              call insert(states(p), aux_vfield, trim(aux_vfield%name))
-
-            end if
-
-            if(prognostic) then
-              gravity = have_option("/physical_parameters/gravity")
-              if(gravity) then
-                sfield => extract_scalar_field(states(p), "Density", stat)
-                if(stat==0) then
-                  call allocate(aux_sfield, sfield%mesh, "VelocityBuoyancyDensity")
-                else
-                  call allocate(aux_sfield, vfield%mesh, "VelocityBuoyancyDensity")
+             if(prognostic) then
+                gravity = have_option("/physical_parameters/gravity")
+                if(gravity) then
+                   sfield => extract_scalar_field(states(p), "Density", stat)
+                   if(stat==0) then
+                      call allocate(aux_sfield, sfield%mesh, "VelocityBuoyancyDensity")
+                   else
+                      call allocate(aux_sfield, vfield%mesh, "VelocityBuoyancyDensity")
+                   end if
+                   call zero(aux_sfield)
+                   aux_sfield%option_path=""
+                   call insert(states(p), aux_sfield, trim(aux_sfield%name))
+                   call deallocate(aux_sfield)
                 end if
-                call zero(aux_sfield)
-                aux_sfield%option_path=""
-                call insert(states(p), aux_sfield, trim(aux_sfield%name))
-                call deallocate(aux_sfield)
-              end if
-            end if
+             end if
             
           end if
 
