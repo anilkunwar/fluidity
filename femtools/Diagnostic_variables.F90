@@ -1643,7 +1643,8 @@ contains
              if (default_stat%detector_group_names(j)==temp_name) then
                 read(default_stat%detector_checkpoint_unit) detector_location
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, i, STATIC_DETECTOR, trim(temp_name))                  
+                      detector_location, i, STATIC_DETECTOR, trim(temp_name))   
+                default_stat%detector_list%detector_names(i)=trim(temp_name)
              else
                 cycle
              end if
@@ -1659,6 +1660,7 @@ contains
                 read(default_stat%detector_checkpoint_unit) detector_location
                 call create_single_detector(default_stat%detector_list, xfield, &
                       detector_location, i+static_dete, LAGRANGIAN_DETECTOR, trim(temp_name)) 
+                default_stat%detector_list%detector_names(i+static_dete)=trim(temp_name)
              else
                 cycle
              end if
@@ -1699,10 +1701,12 @@ contains
 
     end if  ! from_checkpoint
 
-    !chris hack
     default_stat%detector_list%binary_output = .true.
     if (have_option("/io/detectors/ascii_output")) then
-       default_stat%detector_list%binary_output=.false.
+       default_stat%detector_list%binary_output = .false.
+       if(isparallel()) then
+          FLAbort("No support for ascii detector output in parallel. Please use binary output.")
+       end if
     end if
 
     ! Only the first process should write the header file
@@ -1813,24 +1817,19 @@ contains
 
        ! when using mpi_subroutines to write into the detectors file we need to close the file since 
        ! filename.detectors.dat needs to be open now with MPI_OPEN
-       if ((.not.isparallel()).and.(.not. default_stat%detector_list%binary_output)) then
-
-       else    
+       if ((isparallel()).or.(default_stat%detector_list%binary_output)) then
           close(default_stat%detector_list%output_unit)
        end if
     end if  
 
-    if ((isparallel()).or.((.not.isparallel()).and.(default_stat%detector_list%binary_output))) then
-
-    ! bit of hack to delete any existing .detectors.dat file
-    ! if we don't delete the existing .detectors.dat would simply be opened for random access and 
-    ! gradually overwritten, mixing detector output from the current with that of a previous run
-    call MPI_FILE_OPEN(MPI_COMM_FEMTOOLS, trim(filename) // '.detectors.dat', MPI_MODE_CREATE + MPI_MODE_RDWR + MPI_MODE_DELETE_ON_CLOSE, MPI_INFO_NULL, default_stat%detector_list%mpi_fh, IERROR)
-    call MPI_FILE_CLOSE(default_stat%detector_list%mpi_fh, IERROR)
-    
-    call MPI_FILE_OPEN(MPI_COMM_FEMTOOLS, trim(filename) // '.detectors.dat', MPI_MODE_CREATE + MPI_MODE_RDWR, MPI_INFO_NULL, default_stat%detector_list%mpi_fh, IERROR)
-    assert(ierror == MPI_SUCCESS)
-
+    if ((isparallel()).or.(default_stat%detector_list%binary_output)) then
+       ! bit of hack to delete any existing .detectors.dat file
+       ! if we don't delete the existing .detectors.dat would simply be opened for random access and 
+       ! gradually overwritten, mixing detector output from the current with that of a previous run
+       call MPI_FILE_OPEN(MPI_COMM_FEMTOOLS, trim(filename) // '.detectors.dat', MPI_MODE_CREATE + MPI_MODE_RDWR + MPI_MODE_DELETE_ON_CLOSE, MPI_INFO_NULL, default_stat%detector_list%mpi_fh, IERROR)
+       call MPI_FILE_CLOSE(default_stat%detector_list%mpi_fh, IERROR)
+       call MPI_FILE_OPEN(MPI_COMM_FEMTOOLS, trim(filename) // '.detectors.dat', MPI_MODE_CREATE + MPI_MODE_RDWR, MPI_INFO_NULL, default_stat%detector_list%mpi_fh, IERROR)
+       assert(ierror == MPI_SUCCESS)
     end if 
 
     !Get options for lagrangian detector movement
@@ -2599,7 +2598,6 @@ contains
        return
     end if
 
-    !chris hack
     ! If isparallel() or binary output use this
     if (.not.have_option("/io/detectors/ascii_output")) then
        call write_mpi_out(state,detector_list,time,dt)
